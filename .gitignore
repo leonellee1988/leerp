@@ -1,0 +1,13 @@
+# Credenciales — nunca a git
+.env
+config/credentials.json
+.streamlit/secrets.toml
+
+# Entorno virtual
+venv/
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
+*.log
