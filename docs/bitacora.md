@@ -115,3 +115,8 @@
   sidebar + home, conexión de `permisos.py` para filtrar módulos visibles
   por rol, módulos reales (`productos.py`, `clientes.py`, etc.)
   generalizados desde el patrón de GuateCompost
+
+  # Cosar a revisar:
+
+  1. Se perdío el "ojito" en el input de la contraseña
+  2. Revisar color="currentColor" de iconos.py
