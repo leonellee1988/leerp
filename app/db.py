@@ -74,3 +74,123 @@ def get_config_empresa():
         "moneda_simbolo": row[3],
         "logo_url": row[4],
     }
+
+
+# ------------------------------------------------------------
+# Catálogos (usados por varios módulos, no solo Productos)
+# ------------------------------------------------------------
+
+def get_categorias():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id_categoria, nombre FROM categoria WHERE activo = TRUE ORDER BY nombre")
+            rows = cur.fetchall()
+    return [{"id_categoria": r[0], "nombre": r[1]} for r in rows]
+
+
+def get_unidades_medida():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id_unidad, nombre FROM unidad_medida ORDER BY nombre")
+            rows = cur.fetchall()
+    return [{"id_unidad": r[0], "nombre": r[1]} for r in rows]
+
+
+# ------------------------------------------------------------
+# Productos
+# ------------------------------------------------------------
+
+def get_productos(busqueda="", id_categoria=None, estado="todos"):
+    """Lista de productos para la pantalla de Consultar, con filtros opcionales.
+    'busqueda' acepta nombre parcial o el código exacto/parcial (ej. 'PRD-0042')."""
+    condiciones = []
+    parametros = []
+
+    busqueda = busqueda.strip()
+    if busqueda:
+        condiciones.append("(p.nombre ILIKE %s OR p.codigo_producto ILIKE %s)")
+        parametros.append(f"%{busqueda}%")
+        parametros.append(f"%{busqueda}%")
+
+    if id_categoria:
+        condiciones.append("p.id_categoria = %s")
+        parametros.append(id_categoria)
+
+    if estado == "activos":
+        condiciones.append("p.activo = TRUE")
+    elif estado == "inactivos":
+        condiciones.append("p.activo = FALSE")
+
+    where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+
+    query = f"""
+        SELECT p.id_producto, p.codigo_producto, p.nombre, c.nombre, u.nombre, p.precio, p.activo
+        FROM producto p
+        LEFT JOIN categoria c ON p.id_categoria = c.id_categoria
+        LEFT JOIN unidad_medida u ON p.id_unidad_medida = u.id_unidad
+        {where_sql}
+        ORDER BY p.id_producto DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, parametros)
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id_producto": r[0], "codigo_producto": r[1], "nombre": r[2], "categoria": r[3] or "—",
+            "unidad": r[4] or "—", "precio": r[5], "activo": r[6],
+        }
+        for r in rows
+    ]
+
+
+def get_producto_by_id(id_producto):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id_producto, nombre, descripcion, tipo, id_categoria, "
+                "id_unidad_medida, costo, precio, activo "
+                "FROM producto WHERE id_producto = %s",
+                (id_producto,)
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id_producto": row[0], "nombre": row[1], "descripcion": row[2],
+        "tipo": row[3], "id_categoria": row[4], "id_unidad_medida": row[5],
+        "costo": row[6], "precio": row[7], "activo": row[8],
+    }
+
+
+def insert_producto(nombre, descripcion, tipo, id_categoria, id_unidad_medida,
+                     costo, precio, activo, id_usuario_creacion):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO producto "
+                "(nombre, descripcion, tipo, id_categoria, id_unidad_medida, "
+                "costo, precio, activo, id_usuario_creacion) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (nombre, descripcion, tipo, id_categoria, id_unidad_medida,
+                 costo, precio, activo, id_usuario_creacion)
+            )
+        conn.commit()
+
+
+def update_producto(id_producto, nombre, descripcion, tipo, id_categoria,
+                     id_unidad_medida, costo, precio, activo):
+    """Actualiza un producto existente.
+    costo y precio son campos distintos — costo es el costo de adquisición,
+    precio es el precio de venta al cliente. No mezclarlos."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE producto SET nombre=%s, descripcion=%s, tipo=%s, "
+                "id_categoria=%s, id_unidad_medida=%s, costo=%s, precio=%s, activo=%s "
+                "WHERE id_producto=%s",
+                (nombre, descripcion, tipo, id_categoria, id_unidad_medida,
+                 costo, precio, activo, id_producto)
+            )
+        conn.commit()

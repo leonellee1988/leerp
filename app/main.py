@@ -12,6 +12,7 @@ import db
 from utils import permisos
 from utils.navegacion import NAV_STRUCTURE, COLOR_GRUPO
 from utils.iconos import get_icono
+from pages import productos
 
 st.set_page_config(
     page_title="LEERP",
@@ -90,6 +91,13 @@ st.markdown("""
             
 [data-testid="stSidebar"] hr:first-of-type {
     margin-bottom: 2rem !important;
+}
+            
+.stTextInput > div > div > input,
+.stTextArea textarea,
+.stNumberInput input,
+.stSelectbox div[data-baseweb="select"] div {
+    color: #FFFFFF !important;
 }
 
 </style>
@@ -231,11 +239,22 @@ def mostrar_inicio():
 
 MODULOS = {
     "inicio": mostrar_inicio,
+    "productos": productos.mostrar,
 }
 
 pagina = st.session_state.pagina_actual
 
-if pagina in MODULOS:
+# Seguridad: antes solo ocultábamos los módulos sin permiso del menú, pero
+# si "pagina_actual" quedaba en ese valor por sesión previa (ej. cambiaron
+# de rol, o quedó guardado en el navegador), igual se renderizaba. Ahora
+# se valida también aquí, no solo al construir el sidebar.
+acceso_permitido = pagina == "inicio" or permisos.tiene_permiso(rol, pagina)
+
+if not acceso_permitido:
+    st.warning("No tienes acceso a ese módulo. Te llevamos a Inicio.")
+    st.session_state.pagina_actual = "inicio"
+    st.rerun()
+elif pagina in MODULOS:
     MODULOS[pagina]()
 else:
     etiqueta = pagina.capitalize()
