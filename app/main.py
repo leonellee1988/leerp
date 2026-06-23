@@ -92,11 +92,35 @@ st.markdown("""
 [data-testid="stSidebar"] hr:first-of-type {
     margin-bottom: 2rem !important;
 }
-            
+
+/* Color de texto, cursor y placeholder para todos los inputs de módulos.
+   caret-color fuerza el cursor parpadeante a blanco sobre fondo navy.
+   placeholder en blanco semitransparente evita que compita con el valor real. */
 .stTextInput > div > div > input,
 .stTextArea textarea,
 .stNumberInput input,
 .stSelectbox div[data-baseweb="select"] div {
+    color: #FFFFFF !important;
+    caret-color: #FFFFFF !important;
+}
+
+.stTextInput > div > div > input::placeholder,
+.stTextArea textarea::placeholder,
+.stNumberInput input::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+            
+/* Botón Editar en tabla — mismo estilo que botón Ingresar del login */
+[class*="st-key-editar_producto"] button {
+    background-color: #00C2A8 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
+[class*="st-key-editar_producto"] button:hover {
+    background-color: #0A2540 !important;
     color: #FFFFFF !important;
 }
 

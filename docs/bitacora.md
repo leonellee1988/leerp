@@ -281,5 +281,47 @@
 3. Revisar `color="currentColor"` en `iconos.py` (pendiente de Sesión 9)
 4. Implementar reorganización del sidebar (REPORTES separado de INVENTARIO)
 
-**Próximo módulo a construir:** Clientes (mismo patrón que Productos —
-mismo esqueleto, cambian columnas y funciones de `db.py`)
+### Sesión 14 — Pruebas integrales del módulo Productos y correcciones
+ 
+- Pruebas realizadas desde cero: login → sidebar → módulo Productos →
+  carga de productos reales (tienda de tecnología) → Consultar con filtros
+- 7 de 10 puntos del reporte de pruebas resueltos en la primera ronda
+#### Bugs resueltos
+ 
+- **Cursor invisible en inputs** (login y módulos): `caret-color: #FFFFFF`
+  agregado al CSS de `auth.py` y `main.py`
+- **Texto superpuesto en input Precio**: causa raíz — `color-scheme: light`
+  inyectado por Streamlit hacía que el navegador pusiera sus propios estilos
+  encima del CSS del proyecto. Solución: `.stNumberInput input
+  { color-scheme: dark !important; }` en CSS global de `main.py`
+- **Placeholder campo Nombre**: generalizado de "Ej. Monitor 4K 27 pulgadas"
+  a "Ej. Laptop, Mouse, Servicio técnico..." — aplica a cualquier cliente
+- **Campo Costo agregado al formulario**: pendiente técnico desde Sesión 12
+  (cuando se guardaba `0.0` temporal). Formulario ahora tiene 4 columnas
+  en segunda fila: Tipo | Unidad | Costo | Precio de venta.
+  Margen de utilidad (`precio - costo`) queda en BD para el Dashboard
+- **`get_producto_by_id()`** en `db.py` actualizado para incluir
+  `codigo_producto` en el SELECT — necesario para el mensaje de éxito
+  al editar
+#### Comportamientos confirmados normales (no bugs)
+ 
+- Delay en operaciones: latencia de red a Neon Cloud. Solución futura:
+  `@st.cache_data` en catálogos. No urgente para ≤5 usuarios
+- Scroll al llegar al home post-login: timing issue menor, pendiente bajo
+#### Validaciones probadas y funcionando ✅
+ 
+- Guardar sin nombre → error, no guarda
+- Filtros de Consultar (nombre, categoría, estado)
+- Editar producto → cambio confirmado en DBeaver
+- Mensaje de éxito con `codigo_producto` (ej. PRD-0001)
+- Formulario limpio después de guardar y cancelar
+#### Pendientes menores
+ 
+- Botón "Editar" en tabla Consultar visualmente cortado (`Edi / tar`)
+- Scroll al hacer login (timing issue)
+- `color="currentColor"` en `iconos.py` (desde Sesión 9)
+- Reorganización sidebar: grupo "REPORTES" separado de "INVENTARIO"
+### Estado actual (post Sesión 14)
+ 
+**Módulo Productos: completo y funcional ✅**
+Listo para clonar en Clientes, Proveedores e Insumos.

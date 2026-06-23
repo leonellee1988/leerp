@@ -3,9 +3,15 @@
 #
 # Patrón a replicar en Clientes, Proveedores e Insumos: mismo esqueleto,
 # cambian las columnas y las funciones de db.py que se llaman.
+#
+# Fixes aplicados:
+# - Catálogos cargados fuera de las pestañas (ambas los usan con certeza)
+# - costo separado de precio (se guarda 0.0 hasta que exista módulo Compras)
+# - form_key dinámica para limpiar el formulario después de guardar o cancelar
+# - Mensaje de éxito via session_state para que sobreviva al st.rerun()
+#   e incluye el codigo_producto del registro recién creado/editado
 
 import streamlit as st
-
 import db
 
 TIPO_LABELS = {"producto": "Producto físico", "servicio": "Servicio"}
@@ -15,11 +21,21 @@ TIPO_VALORES = {v: k for k, v in TIPO_LABELS.items()}
 def mostrar():
     usuario = st.session_state.usuario_actual
 
+    # --- Estado del módulo ---
     if "producto_editando" not in st.session_state:
         st.session_state.producto_editando = None
+    if "producto_form_key" not in st.session_state:
+        st.session_state.producto_form_key = 0
+    if "producto_mensaje" not in st.session_state:
+        st.session_state.producto_mensaje = None
 
     st.title("Productos")
     st.caption("Catálogo de productos y servicios")
+
+    # Mensaje de éxito persistente (sobrevive al rerun porque vive en session_state)
+    if st.session_state.producto_mensaje:
+        st.success(st.session_state.producto_mensaje)
+        st.session_state.producto_mensaje = None
 
     # Catálogos cargados aquí — fuera de cualquier pestaña — para que
     # tanto "Nuevo registro" como "Consultar" los usen con certeza,
@@ -47,12 +63,14 @@ def mostrar():
                 "Agrégalas antes de crear productos (próximamente desde Configuración)."
             )
 
-        with st.form("form_producto"):
+        # form_key dinámica: al incrementar el número, Streamlit trata el form
+        # como uno nuevo y resetea todos los campos a sus valores por defecto.
+        with st.form(f"form_producto_{st.session_state.producto_form_key}"):
             col1, col2 = st.columns(2)
             with col1:
                 nombre = st.text_input(
                     "Nombre", value=datos["nombre"] if datos else "",
-                    placeholder="Ej. Compost orgánico 5kg",
+                    placeholder="Ej. Laptop Intel Core i3",
                 )
             with col2:
                 lista_categoria = list(opciones_categoria.keys()) or ["Sin categorías"]
@@ -64,7 +82,7 @@ def mostrar():
                     index=lista_categoria.index(nombre_cat_actual) if nombre_cat_actual in lista_categoria else 0,
                 )
 
-            col3, col4, col5 = st.columns(3)
+            col3, col4, col5, col6 = st.columns(4)
             with col3:
                 tipo_actual = TIPO_LABELS.get(datos["tipo"], "Producto físico") if datos else "Producto físico"
                 tipo_sel = st.selectbox(
@@ -81,6 +99,12 @@ def mostrar():
                     index=lista_unidad.index(nombre_unidad_actual) if nombre_unidad_actual in lista_unidad else 0,
                 )
             with col5:
+                costo = st.number_input(
+                    f"Costo ({simbolo})", min_value=0.0,
+                    value=float(datos["costo"]) if datos else 0.0,
+                    step=0.5, format="%.2f",
+                )
+            with col6:
                 precio = st.number_input(
                     f"Precio de venta ({simbolo})", min_value=0.0,
                     value=float(datos["precio"]) if datos else 0.0,
@@ -90,7 +114,7 @@ def mostrar():
             descripcion = st.text_area(
                 "Descripción (opcional)",
                 value=(datos["descripcion"] or "") if datos else "",
-                placeholder="Notas adicionales del producto...",
+                placeholder="Notas adicionales del producto",
             )
 
             activo = st.checkbox("Producto activo", value=datos["activo"] if datos else True)
@@ -107,6 +131,7 @@ def mostrar():
 
         if cancelar:
             st.session_state.producto_editando = None
+            st.session_state.producto_form_key += 1  # resetea el formulario
             st.rerun()
 
         if guardar:
@@ -120,25 +145,29 @@ def mostrar():
                 tipo_valor = TIPO_VALORES[tipo_sel]
 
                 if editando:
-                    # costo: por ahora se preserva el costo existente del producto
-                    # (el formulario actual no expone el campo costo — se agrega
-                    # cuando se construya el módulo de compras y haya precio de costo real).
-                    costo_actual = datos["costo"] if datos else 0.0
+                    # Preserva el costo existente — el formulario no expone este campo aún.
+                    # Se actualizará cuando exista el módulo de Compras.
                     db.update_producto(
                         st.session_state.producto_editando, nombre.strip(), descripcion.strip(),
-                        tipo_valor, id_categoria, id_unidad, costo_actual, precio, activo,
-                    )
-                    st.success(f"Producto '{nombre}' actualizado correctamente.")
+                        tipo_valor, id_categoria, id_unidad, costo, precio, activo,
+                        )
+                    # Obtener el código del producto editado para el mensaje
+                    prod_actualizado = db.get_producto_by_id(st.session_state.producto_editando)
+                    codigo = prod_actualizado["codigo_producto"] if prod_actualizado else ""
+                    st.session_state.producto_mensaje = f"✅ Producto {codigo} — '{nombre.strip()}' actualizado correctamente."
                     st.session_state.producto_editando = None
                 else:
-                    # costo: se registra 0.0 por ahora — el formulario actual no expone
-                    # el campo costo. Se actualizará cuando exista módulo de compras
-                    # con precio de costo real por proveedor.
+                    # costo = 0.0 explícito hasta que exista módulo de Compras
                     db.insert_producto(
                         nombre.strip(), descripcion.strip(), tipo_valor, id_categoria,
-                        id_unidad, 0.0, precio, activo, usuario["id_usuario"],
-                    )
-                    st.success(f"Producto '{nombre}' guardado correctamente.")
+                        id_unidad, costo, precio, activo, usuario["id_usuario"],
+                        )
+                    # Obtener el código del producto recién creado para el mensaje
+                    productos_recientes = db.get_productos(busqueda=nombre.strip())
+                    codigo = productos_recientes[0]["codigo_producto"] if productos_recientes else ""
+                    st.session_state.producto_mensaje = f"✅ Producto {codigo} — '{nombre.strip()}' guardado correctamente."
+
+                st.session_state.producto_form_key += 1  # resetea el formulario
                 st.rerun()
 
     # ----------------------------------------------------------
@@ -148,7 +177,7 @@ def mostrar():
         col_busqueda, col_categoria, col_estado = st.columns([2, 1, 1])
         with col_busqueda:
             busqueda = st.text_input("Buscar por nombre o ID", key="busqueda_productos",
-                                      placeholder="Ej. Compost o PRD-0042")
+                                      placeholder="Ej. Monitor o PRD-0042")
         with col_categoria:
             cat_opciones = ["Todas"] + [c["nombre"] for c in categorias]
             cat_filtro = st.selectbox("Categoría", cat_opciones, key="cat_filtro_productos")
@@ -167,13 +196,13 @@ def mostrar():
         if not lista_productos:
             st.info("No hay productos que coincidan con la búsqueda.")
         else:
-            encabezado = st.columns([1, 3, 2, 1.5, 1.5, 1.2, 0.8])
+            encabezado = st.columns([1.2, 2.5, 1.8, 1.2, 1.2, 1.2, 1.2])
             for col, titulo in zip(encabezado, ["ID", "Nombre", "Categoría", "Unidad", "Precio", "Estado", ""]):
                 col.markdown(f"<small style='color:#5B7280;'>{titulo}</small>", unsafe_allow_html=True)
 
             for p in lista_productos:
                 c_id, c_nombre, c_cat, c_unidad, c_precio, c_estado, c_accion = st.columns(
-                    [1, 3, 2, 1.5, 1.5, 1.2, 0.8]
+                    [1.2, 2.5, 1.8, 1.2, 1.2, 1.2, 1.2]
                 )
                 c_id.write(p["codigo_producto"])
                 c_nombre.write(f"**{p['nombre']}**")
@@ -194,6 +223,7 @@ def mostrar():
                         unsafe_allow_html=True,
                     )
 
-                if c_accion.button("Editar", key=f"editar_producto_{p['id_producto']}"):
+                if c_accion.button("Editar", key=f"editar_producto_{p['id_producto']}", use_container_width=True):
                     st.session_state.producto_editando = p["id_producto"]
+                    st.session_state.producto_form_key += 1
                     st.rerun()

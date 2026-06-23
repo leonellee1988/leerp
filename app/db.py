@@ -149,7 +149,7 @@ def get_producto_by_id(id_producto):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id_producto, nombre, descripcion, tipo, id_categoria, "
+                "SELECT id_producto, codigo_producto, nombre, descripcion, tipo, id_categoria, "
                 "id_unidad_medida, costo, precio, activo "
                 "FROM producto WHERE id_producto = %s",
                 (id_producto,)
@@ -158,9 +158,9 @@ def get_producto_by_id(id_producto):
     if not row:
         return None
     return {
-        "id_producto": row[0], "nombre": row[1], "descripcion": row[2],
-        "tipo": row[3], "id_categoria": row[4], "id_unidad_medida": row[5],
-        "costo": row[6], "precio": row[7], "activo": row[8],
+        "id_producto": row[0], "codigo_producto": row[1], "nombre": row[2], "descripcion": row[3],
+        "tipo": row[4], "id_categoria": row[5], "id_unidad_medida": row[6],
+        "costo": row[7], "precio": row[8], "activo": row[9],
     }
 
 

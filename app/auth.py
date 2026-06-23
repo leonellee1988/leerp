@@ -110,6 +110,7 @@ div[data-testid="stForm"] div[data-testid="stVerticalBlock"] { gap: 0.2rem !impo
     border-radius: 8px;
     border: 1.5px solid #0A2540;
     color: #FFFFFF;
+    caret-color: #FFFFFF;
 }
 .stTextInput > div > div > input:focus {
     border-color: #00C2A8;
@@ -201,13 +202,8 @@ def mostrar_login():
 
 
 def cerrar_sesion():
-    """Cierra la sesión actual y regresa a la pantalla de login.
-    Resetea pagina_actual a 'inicio' para que el próximo login
-    siempre arranque desde la pantalla principal, no desde el último
-    módulo visitado. El scroll reset evita que la pantalla de login
-    aparezca desplazada hacia abajo."""
+    """Cierra la sesión actual y regresa a la pantalla de login."""
     st.session_state.logged_in = False
     st.session_state.usuario_actual = None
     st.session_state.pagina_actual = "inicio"
-    st.markdown("<script>window.scrollTo(0, 0);</script>", unsafe_allow_html=True)
     st.rerun()
