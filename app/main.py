@@ -119,11 +119,12 @@ st.markdown("""
     font-size: 11px !important;
     font-weight: 600 !important;
 }
+            
 [class*="st-key-editar_producto"] button:hover {
     background-color: #0A2540 !important;
     color: #FFFFFF !important;
 }
-
+            
 </style>
 """, unsafe_allow_html=True)
 

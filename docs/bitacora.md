@@ -323,5 +323,92 @@
 - Reorganización sidebar: grupo "REPORTES" separado de "INVENTARIO"
 ### Estado actual (post Sesión 14)
  
-**Módulo Productos: completo y funcional ✅**
-Listo para clonar en Clientes, Proveedores e Insumos.
+### Sesión 15 — Mejoras al módulo Productos: UX, rendimiento y auditoría
+ 
+#### Arquitectura de navegación — eliminación de st.tabs()
+ 
+- `st.tabs()` reemplazado por condicional explícito con `producto_vista`
+  en `session_state` — valores: `"formulario"` | `"consultar"`
+- Razón: `st.tabs` no permite seleccionar una pestaña programáticamente,
+  causando comportamiento inconsistente al dar clic en "Editar" (a veces
+  hacía scroll al formulario, a veces no, dependiendo de la posición del
+  scroll en ese momento)
+- Solución: dos botones de navegación (`Nuevo registro` / `Consultar`)
+  con estado visual — botón activo en teal `primary`, inactivo en
+  `secondary`. Al dar clic en "Editar" desde la tabla, se setea
+  `producto_vista = "formulario"` de forma determinista antes del rerun
+- Beneficio adicional: `product_editando` se limpia al cerrar sesión
+  (agregado en `auth.py → cerrar_sesion()`) — el estado de edición
+  ya no persiste entre sesiones
+#### Limpieza de código
+ 
+- Emojis eliminados de los botones de navegación — decisión de marca:
+  LEERP es un producto TEC profesional, sin emojis en la interfaz
+- Selector CSS redundante de `stSelectbox` eliminado de `main.py`
+#### Vista Consultar — mejoras de UX y rendimiento
+ 
+- **Búsqueda bajo demanda**: la tabla ya no muestra el universo completo
+  al entrar a Consultar. Se muestra el mensaje "Configura los filtros
+  y presiona Buscar" hasta que el usuario ejecute una búsqueda explícita.
+  Beneficio: rendimiento mejorado (no se consulta la BD al entrar) y
+  UX más limpia para catálogos grandes
+- **Botón "Buscar"** agregado como cuarto elemento en la misma fila de
+  filtros — proporciones finales: `[1.5, 1.2, 1.2, 0.7]`. El botón
+  se alinea verticalmente con los inputs mediante `padding-top: 28px`
+- **Columna "Costo"** agregada a la tabla de resultados — campos de
+  `db.get_productos()` ampliados para incluir `p.costo`
+- **Descarga CSV** implementada con `st.download_button` y `pandas`.
+  El CSV incluye campos operativos + campos de auditoría:
+  `Fecha creación` y `Creado por` (JOIN con tabla `usuarios`).
+  Decisión de estándar: todos los CSV de LEERP incluirán siempre
+  estos campos de auditoría — no como opción sino como parte del
+  archivo base. Patrón a replicar en Ventas, Compras y demás módulos
+- Separación visual entre filas de la tabla con CSS:
+  `border-bottom: 0.5px solid rgba(0,0,0,0.06)` y padding vertical —
+  sin cambios en Python, solo CSS en `main.py`
+#### Cambios en db.py — get_productos()
+ 
+- SELECT ampliado: agrega `p.costo`, `p.fecha_creacion`,
+  `us.nombre_completo` (via LEFT JOIN con `usuarios`)
+- Diccionario de retorno ampliado: nuevos campos `costo`,
+  `fecha_creacion` (formateada como `YYYY-MM-DD HH:MM`), `creado_por`
+#### Reorganización del sidebar
+ 
+- Grupo `INVENTARIO` ahora contiene solo `inventarios` (módulo operativo)
+- Nuevo grupo `REPORTES` creado con dos items:
+  - `dashboard_comercial` → "Comercial"
+  - `dashboard_financiero` → "Financiero"
+- `COLOR_GRUPO` en `navegacion.py` actualizado con color para `REPORTES`:
+  `{"bg": "#F4EDF8", "icon": "#7B4FA6"}`
+- Íconos para ambos dashboards agregados en `iconos.py`
+- `permisos.py` actualizado con las nuevas keys para que
+  `menu_visible()` las incluya en el sidebar
+#### Decisiones de diseño confirmadas
+ 
+- Tabla con bordes visuales (HTML crudo): descartado por costo/beneficio
+  desfavorable en Streamlit. El separador CSS es suficiente
+- Scroll automático al home post-login: descartado definitivamente —
+  timing issue irresoluble con `window.scrollTo` en Streamlit
+- Filtro de fecha en Consultar: anotado para módulos transaccionales
+  (Ventas, Compras, Gastos) — no aplica en maestros
+### Estado actual (post Sesión 15)
+ 
+**Módulo Productos: COMPLETO Y CERRADO ✅**
+ 
+Archivos modificados en esta sesión:
+- `app/pages/productos.py` — navegación por condicional, Buscar,
+  Costo en tabla, CSV con auditoría
+- `app/db.py` — `get_productos()` con costo y auditoría
+- `app/main.py` — CSS separador de filas, limpieza de selectores
+- `app/auth.py` — limpieza de session_state al cerrar sesión
+- `utils/navegacion.py` — grupo REPORTES, split de INVENTARIO
+- `utils/iconos.py` — íconos dashboard_comercial y dashboard_financiero
+- `utils/permisos.py` — nuevas keys de dashboards
+
+**Pendientes**
+
+1. Ya no está el botón "Editar" y no es posible editar en la tabla directamente. Aparece un selector al inicio, pero simplemente limpia la pantalla (no selecciona el o los regitros).
+2. Considerar qué otros campos son importantes poder visualizar, ya que ahora tenemos la barra horizontal.
+3. Quitar el botón "Descargar CSV", ya que la tabla de Streamlit nos proporciona esa opción.
+4. Si estoy en "Consultar" y cierro sesión, vuelvo a ingresar al modulo de "Producto", aparezco en "Consultar", pero lo ideal es que aparezca siempre desde "Nuevo registro", no?
+5. No sé ustedes, pero me "choca" el botón "Cancelar", realmente no sé que tanto valor tenga ese botón, que simplemente limpia los campos. Yo no lo usaría honestamente, ya que si me equivoco sería en un campo puntual, no en todos. Revisen si vale la pena tener ese botón (entre menos funcionalidades con poco valor tengamos, mucho mejor). Además ese cancelar me está sacando un mensaje de error, que aparece y desaparece un vistazo! Si lo van a dejar, revisen ese bug!

@@ -124,10 +124,13 @@ def get_productos(busqueda="", id_categoria=None, estado="todos"):
     where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
 
     query = f"""
-        SELECT p.id_producto, p.codigo_producto, p.nombre, c.nombre, u.nombre, p.precio, p.activo
+        SELECT p.id_producto, p.codigo_producto, p.nombre, p.descripcion, c.nombre, u.nombre,
+            p.costo, p.precio, p.activo,
+            p.fecha_creacion, us.nombre_completo
         FROM producto p
         LEFT JOIN categoria c ON p.id_categoria = c.id_categoria
         LEFT JOIN unidad_medida u ON p.id_unidad_medida = u.id_unidad
+        LEFT JOIN usuarios us ON p.id_usuario_creacion = us.id_usuario
         {where_sql}
         ORDER BY p.id_producto DESC
     """
@@ -138,8 +141,10 @@ def get_productos(busqueda="", id_categoria=None, estado="todos"):
 
     return [
         {
-            "id_producto": r[0], "codigo_producto": r[1], "nombre": r[2], "categoria": r[3] or "—",
-            "unidad": r[4] or "—", "precio": r[5], "activo": r[6],
+            "id_producto": r[0], "codigo_producto": r[1], "nombre": r[2], "descripcion": r[3] or "—", "categoria": r[4] or "—",
+            "unidad": r[5] or "—", "costo": r[6], "precio": r[7], "activo": r[8],
+            "fecha_creacion": r[9].strftime("%Y-%m-%d %H:%M") if r[9] else "—",
+            "creado_por": r[10] or "—",
         }
         for r in rows
     ]

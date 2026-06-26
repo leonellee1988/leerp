@@ -11,7 +11,7 @@ PERMISOS = {
     "admin": {
         "productos", "clientes", "proveedores", "insumos",
         "ventas", "compras", "gastos",
-        "inventarios", "dashboard",
+        "inventarios", "dashboard_comercial", "dashboard_financiero",
         "usuarios", "configuracion",
     },
     "captura": {
@@ -21,10 +21,10 @@ PERMISOS = {
     "analista": {
         "productos", "clientes", "proveedores", "insumos",
         "ventas", "compras", "gastos",
-        "inventarios", "dashboard",
+        "inventarios", "dashboard_comercial", "dashboard_financiero",
     },
     "visor": {
-        "inventarios", "dashboard",
+        "inventarios", "dashboard_comercial", "dashboard_financiero",
     },
 }
 

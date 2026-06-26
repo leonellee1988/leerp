@@ -206,4 +206,9 @@ def cerrar_sesion():
     st.session_state.logged_in = False
     st.session_state.usuario_actual = None
     st.session_state.pagina_actual = "inicio"
+    # Limpiar estado de módulos para que no persistan entre sesiones
+    for key in ["producto_editando", "producto_form_key", "producto_mensaje", "ir_a_editar", "producto_vista"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.markdown("<script>window.scrollTo(0, 0);</script>", unsafe_allow_html=True)
     st.rerun()

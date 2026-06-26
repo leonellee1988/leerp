@@ -30,11 +30,17 @@ NAV_STRUCTURE = [
         ],
     },
     {
-        "grupo": "INVENTARIO",
-        "items": [
-            {"key": "inventarios", "label": "Inventarios"},
-            {"key": "dashboard", "label": "Dashboard"},
-        ],
+    "grupo": "INVENTARIO",
+    "items": [
+        {"key": "inventarios", "label": "Inventarios"},
+    ],
+    },
+    {
+    "grupo": "REPORTES",
+    "items": [
+        {"key": "dashboard_comercial", "label": "Comercial"},
+        {"key": "dashboard_financiero", "label": "Financiero"},
+    ],  
     },
     {
         "grupo": "ADMINISTRACIÓN",
@@ -54,4 +60,5 @@ COLOR_GRUPO = {
     "TRANSACCIONES": {"bg": "#E1F5EE", "icon": "#0F6E56"},
     "INVENTARIO": {"bg": "#0A2540", "icon": "#7EB8D4"},
     "ADMINISTRACIÓN": {"bg": "#EAF4FA", "icon": "#3A7CA5"},
+    "REPORTES": {"bg": "#F4EDF8", "icon": "#7B4FA6"},
 }
