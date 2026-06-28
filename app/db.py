@@ -232,3 +232,323 @@ def update_producto(id_producto, nombre, descripcion, tipo, id_categoria,
                  costo, precio, activo, id_producto)
             )
         conn.commit()
+
+
+# ------------------------------------------------------------
+# Clientes
+# ------------------------------------------------------------
+
+def get_clientes(busqueda="", estado="todos"):
+    condiciones = []
+    parametros = []
+
+    busqueda = busqueda.strip()
+    if busqueda:
+        condiciones.append("(c.nombre ILIKE %s OR c.codigo_cliente ILIKE %s OR c.nit ILIKE %s)")
+        parametros.extend([f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%"])
+
+    if estado == "activos":
+        condiciones.append("c.activo = TRUE")
+    elif estado == "inactivos":
+        condiciones.append("c.activo = FALSE")
+
+    where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+
+    query = f"""
+        SELECT
+            c.id_cliente,
+            c.codigo_cliente,
+            c.nombre,
+            c.nit,
+            c.telefono,
+            c.correo,
+            c.direccion,
+            c.activo,
+            c.fecha_creacion,
+            us.nombre_completo AS creado_por
+        FROM cliente c
+        LEFT JOIN usuarios us ON c.id_usuario_creacion = us.id_usuario
+        {where_sql}
+        ORDER BY c.id_cliente DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, parametros)
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id_cliente":     r["id_cliente"],
+            "codigo_cliente": r["codigo_cliente"],
+            "nombre":         r["nombre"],
+            "nit":            r["nit"]       or "—",
+            "telefono":       r["telefono"]  or "—",
+            "correo":         r["correo"]    or "—",
+            "direccion":      r["direccion"] or "—",
+            "activo":         r["activo"],
+            "fecha_creacion": r["fecha_creacion"].strftime("%Y-%m-%d %H:%M") if r["fecha_creacion"] else "—",
+            "creado_por":     r["creado_por"] or "—",
+        }
+        for r in rows
+    ]
+
+
+def get_cliente_by_id(id_cliente):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_cliente, codigo_cliente, nombre, nit,
+                          telefono, correo, direccion, activo
+                   FROM cliente WHERE id_cliente = %s""",
+                (id_cliente,)
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_cliente_by_codigo(codigo_cliente):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_cliente, codigo_cliente, nombre, nit,
+                          telefono, correo, direccion, activo
+                   FROM cliente WHERE codigo_cliente ILIKE %s""",
+                (f"%{codigo_cliente.strip()}%",)
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def insert_cliente(nombre, nit, telefono, correo, direccion, activo, id_usuario_creacion):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO cliente
+                   (nombre, nit, telefono, correo, direccion, activo, id_usuario_creacion)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (nombre, nit, telefono, correo, direccion, activo, id_usuario_creacion)
+            )
+        conn.commit()
+
+
+def update_cliente(id_cliente, nombre, nit, telefono, correo, direccion, activo):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE cliente
+                   SET nombre=%s, nit=%s, telefono=%s,
+                       correo=%s, direccion=%s, activo=%s
+                   WHERE id_cliente=%s""",
+                (nombre, nit, telefono, correo, direccion, activo, id_cliente)
+            )
+        conn.commit()
+
+# ------------------------------------------------------------
+# Proveedores
+# ------------------------------------------------------------
+
+def get_proveedores(busqueda="", estado="todos"):
+    condiciones = []
+    parametros = []
+    busqueda = busqueda.strip()
+    if busqueda:
+        condiciones.append("(p.nombre ILIKE %s OR p.codigo_proveedor ILIKE %s OR p.nit ILIKE %s)")
+        parametros.extend([f"%{busqueda}%", f"%{busqueda}%", f"%{busqueda}%"])
+    if estado == "activos":
+        condiciones.append("p.activo = TRUE")
+    elif estado == "inactivos":
+        condiciones.append("p.activo = FALSE")
+    where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    query = f"""
+        SELECT p.id_proveedor, p.codigo_proveedor, p.nombre, p.contacto,
+               p.nit, p.telefono, p.correo, p.direccion, p.activo,
+               p.fecha_creacion, us.nombre_completo AS creado_por
+        FROM proveedor p
+        LEFT JOIN usuarios us ON p.id_usuario_creacion = us.id_usuario
+        {where_sql}
+        ORDER BY p.id_proveedor DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, parametros)
+            rows = cur.fetchall()
+    return [
+        {
+            "id_proveedor":     r["id_proveedor"],
+            "codigo_proveedor": r["codigo_proveedor"],
+            "nombre":           r["nombre"],
+            "contacto":         r["contacto"]  or "—",
+            "nit":              r["nit"]        or "—",
+            "telefono":         r["telefono"]   or "—",
+            "correo":           r["correo"]     or "—",
+            "direccion":        r["direccion"]  or "—",
+            "activo":           r["activo"],
+            "fecha_creacion":   r["fecha_creacion"].strftime("%Y-%m-%d %H:%M") if r["fecha_creacion"] else "—",
+            "creado_por":       r["creado_por"] or "—",
+        }
+        for r in rows
+    ]
+
+
+def get_proveedor_by_id(id_proveedor):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_proveedor, codigo_proveedor, nombre, contacto,
+                          nit, telefono, correo, direccion, activo
+                   FROM proveedor WHERE id_proveedor = %s""",
+                (id_proveedor,)
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_proveedor_by_codigo(codigo_proveedor):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_proveedor, codigo_proveedor, nombre, contacto,
+                          nit, telefono, correo, direccion, activo
+                   FROM proveedor WHERE codigo_proveedor ILIKE %s""",
+                (f"%{codigo_proveedor.strip()}%",)
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def insert_proveedor(nombre, contacto, nit, telefono, correo,
+                     direccion, activo, id_usuario_creacion):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO proveedor
+                   (nombre, contacto, nit, telefono, correo,
+                    direccion, activo, id_usuario_creacion)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (nombre, contacto, nit, telefono, correo,
+                 direccion, activo, id_usuario_creacion)
+            )
+        conn.commit()
+
+
+def update_proveedor(id_proveedor, nombre, contacto, nit, telefono,
+                     correo, direccion, activo):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE proveedor
+                   SET nombre=%s, contacto=%s, nit=%s, telefono=%s,
+                       correo=%s, direccion=%s, activo=%s
+                   WHERE id_proveedor=%s""",
+                (nombre, contacto, nit, telefono, correo,
+                 direccion, activo, id_proveedor)
+            )
+        conn.commit()
+
+# ------------------------------------------------------------
+# Insumos
+# ------------------------------------------------------------
+
+def get_unidades_medida_insumo():
+    return get_unidades_medida()
+
+def get_insumos(busqueda="", estado="todos"):
+    condiciones = []
+    parametros = []
+    busqueda = busqueda.strip()
+    if busqueda:
+        condiciones.append("(i.nombre ILIKE %s OR i.codigo_insumo ILIKE %s)")
+        parametros.extend([f"%{busqueda}%", f"%{busqueda}%"])
+    if estado == "activos":
+        condiciones.append("i.activo = TRUE")
+    elif estado == "inactivos":
+        condiciones.append("i.activo = FALSE")
+    where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
+    query = f"""
+        SELECT i.id_insumo, i.codigo_insumo, i.nombre, i.descripcion,
+               u.nombre AS unidad, i.costo, i.activo,
+               i.fecha_creacion, us.nombre_completo AS creado_por
+        FROM insumo i
+        LEFT JOIN unidad_medida u  ON i.id_unidad_medida = u.id_unidad
+        LEFT JOIN usuarios     us  ON i.id_usuario_creacion = us.id_usuario
+        {where_sql}
+        ORDER BY i.id_insumo DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, parametros)
+            rows = cur.fetchall()
+    return [
+        {
+            "id_insumo":      r["id_insumo"],
+            "codigo_insumo":  r["codigo_insumo"],
+            "nombre":         r["nombre"],
+            "descripcion":    r["descripcion"] or "—",
+            "unidad":         r["unidad"]      or "—",
+            "costo":          r["costo"],
+            "activo":         r["activo"],
+            "fecha_creacion": r["fecha_creacion"].strftime("%Y-%m-%d %H:%M") if r["fecha_creacion"] else "—",
+            "creado_por":     r["creado_por"]  or "—",
+        }
+        for r in rows
+    ]
+
+
+def get_insumo_by_id(id_insumo):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_insumo, codigo_insumo, nombre, descripcion,
+                          id_unidad_medida, costo, activo
+                   FROM insumo WHERE id_insumo = %s""",
+                (id_insumo,)
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_insumo_by_codigo(codigo_insumo):
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_insumo, codigo_insumo, nombre, descripcion,
+                          id_unidad_medida, costo, activo
+                   FROM insumo WHERE codigo_insumo ILIKE %s""",
+                (f"%{codigo_insumo.strip()}%",)
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def insert_insumo(nombre, descripcion, id_unidad_medida, costo,
+                  activo, id_usuario_creacion):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO insumo
+                   (nombre, descripcion, id_unidad_medida, costo,
+                    activo, id_usuario_creacion)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (nombre, descripcion, id_unidad_medida, costo,
+                 activo, id_usuario_creacion)
+            )
+        conn.commit()
+
+
+def update_insumo(id_insumo, nombre, descripcion, id_unidad_medida,
+                  costo, activo):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE insumo
+                   SET nombre=%s, descripcion=%s, id_unidad_medida=%s,
+                       costo=%s, activo=%s
+                   WHERE id_insumo=%s""",
+                (nombre, descripcion, id_unidad_medida, costo,
+                 activo, id_insumo)
+            )
+        conn.commit()

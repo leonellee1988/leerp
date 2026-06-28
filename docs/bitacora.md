@@ -454,11 +454,73 @@ Archivos modificados en esta sesión:
   nueva función `get_producto_by_codigo()`
 ### Estado actual (post Sesión 16)
  
-**Módulo Productos: CERRADO Y COMPLETO**
- 
-**Próximo módulo: Clientes**
-Campos: `codigo_cliente`, `nombre`, `nit`, `telefono`,
-`correo`, `direccion`, `activo`, `id_usuario_creacion`, `fecha_creacion`
-Sin catálogos de categoría ni unidad de medida.
-Sin costo/precio — es maestro de contactos.
-Mismo patrón de 3 vistas: Nuevo registro / Consultar / Modificar.
+### Sesión 17 — Módulos Proveedores e Insumos + FEL + Roadmap
+
+#### Módulo Proveedores — COMPLETO
+
+- Mismo patrón de 3 vistas que Clientes (Nuevo / Consultar / Modificar)
+- Campo adicional respecto a Clientes: `contacto` (nombre de la persona
+  de contacto en el proveedor)
+- Búsqueda en Modificar acepta código parcial (ILIKE) —
+  homologado con el comportamiento de Productos y Clientes
+- Archivos afectados: `proveedores.py` (nuevo), `db.py` (5 funciones
+  agregadas), `main.py` (import + MODULOS), `auth.py` (keys de limpieza)
+
+#### Módulo Insumos — COMPLETO
+
+- Diferencias respecto a otros maestros:
+  - Sin categoría (solo unidad de medida)
+  - Sin precio de venta — solo costo de adquisición
+  - `activo` y `costo` en la misma fila del formulario (menos campos,
+    mejor uso del espacio)
+- Búsqueda en Consultar por nombre o código
+- Mismo patrón de limpieza de `session_state` al cerrar sesión
+- Archivos afectados: `insumos.py` (nuevo), `db.py` (6 funciones
+  agregadas), `main.py` (import + MODULOS), `auth.py` (keys de limpieza)
+
+#### Consulta técnica — FEL (Factura Electrónica en Línea SAT Guatemala)
+
+- Confirmado que es técnicamente viable a través de certificadores
+  autorizados (INFILE, Megaprint, G4S, entre otros)
+- El SAT no tiene API pública directa — la integración es vía
+  certificador (intermediario homologado)
+- Costo por documento: aprox. Q0.10–Q0.50 según volumen y certificador
+- En Guatemala la FEL es obligatoria para la mayoría de contribuyentes
+- Decisión: FEL va en la Capa 2 de add-ons (cobro aparte), no en el
+  core del ERP base
+- Acción inmediata: el módulo de Ventas se diseñará FEL-ready —
+  campos necesarios (NIT cliente, descripción de línea, cantidad,
+  precio unitario, total) incluidos desde el diseño base. La capa
+  de integración con el certificador se agrega después como módulo
+  independiente
+
+#### Estado de los 4 maestros
+
+| Módulo | Estado |
+|---|---|
+| Productos | COMPLETO |
+| Clientes | COMPLETO |
+| Proveedores | COMPLETO |
+| Insumos | COMPLETO |
+
+#### Roadmap definido — próximas etapas
+
+1. **Ventas** — prioridad máxima, módulo de mayor valor para demo
+   comercial. Complejidad nueva: cabecera + detalle (múltiples líneas).
+   Requiere diseño de UX previo antes de codificar
+2. **Compras** — mismo patrón cabecera/detalle, genera `entrada_compra`
+   en Kardex
+3. **Gastos** — más simple, sin movimiento de inventario de productos
+4. **Inventarios** — vista de consulta del Kardex + ajustes manuales
+5. **Configuración** — gestión de `config_empresa`, categorías,
+   unidades de medida (actualmente via DBeaver)
+6. **Usuarios** — CRUD solo para rol `admin`
+7. **Dashboards** — Comercial y Financiero, al final cuando haya
+   datos transaccionales
+
+#### Próxima sesión — diseño de Ventas
+
+Antes de codificar, definir:
+- Cómo manejar el detalle (múltiples líneas de producto) en Streamlit
+- Cómo el Kardex recibe el movimiento automático al guardar la venta
+- Campos mínimos para ser FEL-ready desde el día 1

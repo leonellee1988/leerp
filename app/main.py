@@ -12,7 +12,7 @@ import db
 from utils import permisos
 from utils.navegacion import NAV_STRUCTURE, COLOR_GRUPO
 from utils.iconos import get_icono
-from pages import productos
+from pages import productos, clientes, proveedores, insumos
 
 st.set_page_config(
     page_title="LEERP",
@@ -92,10 +92,7 @@ st.markdown("""
 [data-testid="stSidebar"] hr:first-of-type {
     margin-bottom: 2rem !important;
 }
-
-/* Color de texto, cursor y placeholder para todos los inputs de módulos.
-   caret-color fuerza el cursor parpadeante a blanco sobre fondo navy.
-   placeholder en blanco semitransparente evita que compita con el valor real. */
+            
 .stTextInput > div > div > input,
 .stTextArea textarea,
 .stNumberInput input,
@@ -104,27 +101,16 @@ st.markdown("""
     caret-color: #FFFFFF !important;
 }
 
+.stNumberInput input {
+    color-scheme: dark !important;
+}
+
 .stTextInput > div > div > input::placeholder,
 .stTextArea textarea::placeholder,
 .stNumberInput input::placeholder {
     color: rgba(255, 255, 255, 0.4) !important;
 }
-            
-/* Botón Editar en tabla — mismo estilo que botón Ingresar del login */
-[class*="st-key-editar_producto"] button {
-    background-color: #00C2A8 !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-size: 11px !important;
-    font-weight: 600 !important;
-}
-            
-[class*="st-key-editar_producto"] button:hover {
-    background-color: #0A2540 !important;
-    color: #FFFFFF !important;
-}
-            
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -265,6 +251,9 @@ def mostrar_inicio():
 MODULOS = {
     "inicio": mostrar_inicio,
     "productos": productos.mostrar,
+    "clientes": clientes.mostrar,
+    "proveedores": proveedores.mostrar,
+    "insumos": insumos.mostrar,
 }
 
 pagina = st.session_state.pagina_actual
