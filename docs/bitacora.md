@@ -405,10 +405,60 @@ Archivos modificados en esta sesión:
 - `utils/iconos.py` — íconos dashboard_comercial y dashboard_financiero
 - `utils/permisos.py` — nuevas keys de dashboards
 
-**Pendientes**
-
-1. Ya no está el botón "Editar" y no es posible editar en la tabla directamente. Aparece un selector al inicio, pero simplemente limpia la pantalla (no selecciona el o los regitros).
-2. Considerar qué otros campos son importantes poder visualizar, ya que ahora tenemos la barra horizontal.
-3. Quitar el botón "Descargar CSV", ya que la tabla de Streamlit nos proporciona esa opción.
-4. Si estoy en "Consultar" y cierro sesión, vuelvo a ingresar al modulo de "Producto", aparezco en "Consultar", pero lo ideal es que aparezca siempre desde "Nuevo registro", no?
-5. No sé ustedes, pero me "choca" el botón "Cancelar", realmente no sé que tanto valor tenga ese botón, que simplemente limpia los campos. Yo no lo usaría honestamente, ya que si me equivoco sería en un campo puntual, no en todos. Revisen si vale la pena tener ese botón (entre menos funcionalidades con poco valor tengamos, mucho mejor). Además ese cancelar me está sacando un mensaje de error, que aparece y desaparece un vistazo! Si lo van a dejar, revisen ese bug!
+### Sesión 16 — Cierre del módulo Productos
+ 
+#### Cambios estructurales
+ 
+- `st.data_editor` con checkbox descartado definitivamente — el callback
+  `on_change` resolvía el timing issue pero la experiencia visual no
+  mejoraba respecto al problema original. Decisión: tres vistas
+  separadas (Nuevo registro / Consultar / Modificar) en vez de edición
+  desde la tabla. Patrón estándar SAP/Odoo: búsqueda explícita → edición
+- Formulario extraído a función `_formulario()` reutilizada por
+  "Nuevo registro" y "Modificar" — cambios futuros al formulario
+  se hacen en un solo lugar
+- Botón "Guardar producto" centrado con columnas `[2, 3, 2]` —
+  ya no ocupa todo el ancho de pantalla
+#### Vista Modificar — decisiones de diseño
+ 
+- Búsqueda por código del producto (campo de texto libre + botón Buscar)
+- Si encuentra 1 resultado → carga formulario precargado con `st.rerun()`
+  inmediato (sin esto, Streamlit no actualizaba la vista en ese ciclo)
+- Si no encuentra resultado → limpia `producto_editando = None` para
+  que el formulario anterior desaparezca. Razón: usuario mecánico
+  puede no revisar qué producto está editando si el formulario
+  permanece visible de una búsqueda anterior
+- Si encuentra más de 1 resultado → warning pidiendo código exacto
+- Búsqueda acepta código parcial (ej. `0007` encuentra `PRD-0007`) —
+  comportamiento intencional, más ágil para el usuario operativo
+- Label cambiado a "Ingrese el código del producto" — comunica
+  claramente que se espera un código, no texto libre
+- Función `get_producto_by_codigo()` agregada a `db.py` — búsqueda
+  exacta por `codigo_producto` con `RealDictCursor`
+#### Mejora de `db.py` — RealDictCursor
+ 
+- Todas las funciones de consulta migradas a `RealDictCursor`
+  (`psycopg2.extras`): cada fila es un dict con nombres de columna
+  como llaves (`r["nombre"]` en vez de `r[3]`)
+- Elimina permanentemente el riesgo de `KeyError` por índices
+  desincronizados al agregar columnas al SELECT
+- `verificar_login` mantiene cursor estándar — necesita `row[2]`
+  para bcrypt antes de construir el dict
+- `insert_producto` y `update_producto` mantienen cursor estándar —
+  no leen filas, solo escriben
+#### Archivos modificados en esta sesión
+ 
+- `app/pages/productos.py` — tres vistas, formulario reutilizable,
+  reset de módulo, Modificar con búsqueda exacta
+- `app/db.py` — RealDictCursor en todas las consultas,
+  nueva función `get_producto_by_codigo()`
+### Estado actual (post Sesión 16)
+ 
+**Módulo Productos: CERRADO Y COMPLETO**
+ 
+**Próximo módulo: Clientes**
+Campos: `codigo_cliente`, `nombre`, `nit`, `telefono`,
+`correo`, `direccion`, `activo`, `id_usuario_creacion`, `fecha_creacion`
+Sin catálogos de categoría ni unidad de medida.
+Sin costo/precio — es maestro de contactos.
+Mismo patrón de 3 vistas: Nuevo registro / Consultar / Modificar.

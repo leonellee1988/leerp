@@ -5,15 +5,16 @@
 # estas funciones, nunca abre su propia conexión directamente — así,
 # si algo de la conexión cambia, solo se toca este archivo.
 #
-# Por ahora solo incluye lo necesario para el login. Las funciones de
-# cada módulo (get_productos, insert_producto, etc.) se van agregando
-# aquí abajo a medida que se construye cada página, siguiendo siempre
-# el mismo patrón: with get_connection() as conn: ... con parámetros
-# seguros (%s), nunca armando el SQL con f-strings.
+# DECISIÓN ESTRUCTURAL: todas las funciones usan RealDictCursor.
+# Esto hace que cada fila devuelta sea un dict con nombres de columna
+# como llaves (r["nombre"] en vez de r[3]), eliminando permanentemente
+# el riesgo de KeyError por índices desincronizados al agregar columnas
+# al SELECT. Aplica a todas las funciones actuales y futuras.
 
 import os
 
 import psycopg2
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
 from utils.auth_utils import verificar_password
@@ -35,6 +36,9 @@ def get_connection():
 
 # ------------------------------------------------------------
 # Autenticación
+# Excepción: verificar_login usa cursor estándar porque necesita
+# acceder a password_hash por índice para verificarlo con bcrypt
+# antes de construir el dict de retorno. El resto usa RealDictCursor.
 # ------------------------------------------------------------
 
 def verificar_login(usuario, password):
@@ -58,7 +62,7 @@ def verificar_login(usuario, password):
 def get_config_empresa():
     """Devuelve los datos de configuración del cliente (1 sola fila)."""
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 "SELECT nombre_empresa, pais, moneda_codigo, moneda_simbolo, logo_url "
                 "FROM config_empresa LIMIT 1"
@@ -68,11 +72,11 @@ def get_config_empresa():
     if not row:
         return None
     return {
-        "nombre_empresa": row[0],
-        "pais": row[1],
-        "moneda_codigo": row[2],
-        "moneda_simbolo": row[3],
-        "logo_url": row[4],
+        "nombre_empresa": row["nombre_empresa"],
+        "pais": row["pais"],
+        "moneda_codigo": row["moneda_codigo"],
+        "moneda_simbolo": row["moneda_simbolo"],
+        "logo_url": row["logo_url"],
     }
 
 
@@ -82,18 +86,18 @@ def get_config_empresa():
 
 def get_categorias():
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT id_categoria, nombre FROM categoria WHERE activo = TRUE ORDER BY nombre")
             rows = cur.fetchall()
-    return [{"id_categoria": r[0], "nombre": r[1]} for r in rows]
+    return [{"id_categoria": r["id_categoria"], "nombre": r["nombre"]} for r in rows]
 
 
 def get_unidades_medida():
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT id_unidad, nombre FROM unidad_medida ORDER BY nombre")
             rows = cur.fetchall()
-    return [{"id_unidad": r[0], "nombre": r[1]} for r in rows]
+    return [{"id_unidad": r["id_unidad"], "nombre": r["nombre"]} for r in rows]
 
 
 # ------------------------------------------------------------
@@ -101,8 +105,10 @@ def get_unidades_medida():
 # ------------------------------------------------------------
 
 def get_productos(busqueda="", id_categoria=None, estado="todos"):
-    """Lista de productos para la pantalla de Consultar, con filtros opcionales.
-    'busqueda' acepta nombre parcial o el código exacto/parcial (ej. 'PRD-0042')."""
+    """Lista de productos para la pantalla Consultar, con filtros opcionales.
+    'busqueda' acepta nombre parcial o código exacto/parcial (ej. 'PRD-0042').
+    Devuelve todos los campos operativos + auditoría (fecha_creacion, creado_por)
+    para que el CSV de descarga siempre incluya trazabilidad completa."""
     condiciones = []
     parametros = []
 
@@ -124,60 +130,86 @@ def get_productos(busqueda="", id_categoria=None, estado="todos"):
     where_sql = ("WHERE " + " AND ".join(condiciones)) if condiciones else ""
 
     query = f"""
-        SELECT p.id_producto, p.codigo_producto, p.nombre, p.descripcion, c.nombre, u.nombre,
-            p.costo, p.precio, p.activo,
-            p.fecha_creacion, us.nombre_completo
+        SELECT
+            p.id_producto,
+            p.codigo_producto,
+            p.nombre,
+            p.descripcion,
+            c.nombre        AS categoria,
+            u.nombre        AS unidad,
+            p.costo,
+            p.precio,
+            p.activo,
+            p.fecha_creacion,
+            us.nombre_completo AS creado_por
         FROM producto p
-        LEFT JOIN categoria c ON p.id_categoria = c.id_categoria
-        LEFT JOIN unidad_medida u ON p.id_unidad_medida = u.id_unidad
-        LEFT JOIN usuarios us ON p.id_usuario_creacion = us.id_usuario
+        LEFT JOIN categoria     c  ON p.id_categoria        = c.id_categoria
+        LEFT JOIN unidad_medida u  ON p.id_unidad_medida    = u.id_unidad
+        LEFT JOIN usuarios      us ON p.id_usuario_creacion = us.id_usuario
         {where_sql}
         ORDER BY p.id_producto DESC
     """
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(query, parametros)
             rows = cur.fetchall()
 
     return [
         {
-            "id_producto": r[0], "codigo_producto": r[1], "nombre": r[2], "descripcion": r[3] or "—", "categoria": r[4] or "—",
-            "unidad": r[5] or "—", "costo": r[6], "precio": r[7], "activo": r[8],
-            "fecha_creacion": r[9].strftime("%Y-%m-%d %H:%M") if r[9] else "—",
-            "creado_por": r[10] or "—",
+            "id_producto":      r["id_producto"],
+            "codigo_producto":  r["codigo_producto"],
+            "nombre":           r["nombre"],
+            "descripcion":      r["descripcion"] or "—",
+            "categoria":        r["categoria"]   or "—",
+            "unidad":           r["unidad"]       or "—",
+            "costo":            r["costo"],
+            "precio":           r["precio"],
+            "activo":           r["activo"],
+            "fecha_creacion":   r["fecha_creacion"].strftime("%Y-%m-%d %H:%M") if r["fecha_creacion"] else "—",
+            "creado_por":       r["creado_por"] or "—",
         }
         for r in rows
     ]
 
 
 def get_producto_by_id(id_producto):
+    """Devuelve todos los campos editables de un producto por su ID.
+    Usado por el formulario de edición para precargar los valores actuales."""
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
-                "SELECT id_producto, codigo_producto, nombre, descripcion, tipo, id_categoria, "
-                "id_unidad_medida, costo, precio, activo "
-                "FROM producto WHERE id_producto = %s",
+                """SELECT id_producto, codigo_producto, nombre, descripcion,
+                          tipo, id_categoria, id_unidad_medida, costo, precio, activo
+                   FROM producto
+                   WHERE id_producto = %s""",
                 (id_producto,)
             )
             row = cur.fetchone()
     if not row:
         return None
     return {
-        "id_producto": row[0], "codigo_producto": row[1], "nombre": row[2], "descripcion": row[3],
-        "tipo": row[4], "id_categoria": row[5], "id_unidad_medida": row[6],
-        "costo": row[7], "precio": row[8], "activo": row[9],
+        "id_producto":      row["id_producto"],
+        "codigo_producto":  row["codigo_producto"],
+        "nombre":           row["nombre"],
+        "descripcion":      row["descripcion"],
+        "tipo":             row["tipo"],
+        "id_categoria":     row["id_categoria"],
+        "id_unidad_medida": row["id_unidad_medida"],
+        "costo":            row["costo"],
+        "precio":           row["precio"],
+        "activo":           row["activo"],
     }
 
 
 def insert_producto(nombre, descripcion, tipo, id_categoria, id_unidad_medida,
-                     costo, precio, activo, id_usuario_creacion):
+                    costo, precio, activo, id_usuario_creacion):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO producto "
-                "(nombre, descripcion, tipo, id_categoria, id_unidad_medida, "
-                "costo, precio, activo, id_usuario_creacion) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                """INSERT INTO producto
+                   (nombre, descripcion, tipo, id_categoria, id_unidad_medida,
+                    costo, precio, activo, id_usuario_creacion)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (nombre, descripcion, tipo, id_categoria, id_unidad_medida,
                  costo, precio, activo, id_usuario_creacion)
             )
@@ -185,16 +217,17 @@ def insert_producto(nombre, descripcion, tipo, id_categoria, id_unidad_medida,
 
 
 def update_producto(id_producto, nombre, descripcion, tipo, id_categoria,
-                     id_unidad_medida, costo, precio, activo):
+                    id_unidad_medida, costo, precio, activo):
     """Actualiza un producto existente.
-    costo y precio son campos distintos — costo es el costo de adquisición,
-    precio es el precio de venta al cliente. No mezclarlos."""
+    costo = costo de adquisición, precio = precio de venta. No mezclarlos."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE producto SET nombre=%s, descripcion=%s, tipo=%s, "
-                "id_categoria=%s, id_unidad_medida=%s, costo=%s, precio=%s, activo=%s "
-                "WHERE id_producto=%s",
+                """UPDATE producto
+                   SET nombre=%s, descripcion=%s, tipo=%s,
+                       id_categoria=%s, id_unidad_medida=%s,
+                       costo=%s, precio=%s, activo=%s
+                   WHERE id_producto=%s""",
                 (nombre, descripcion, tipo, id_categoria, id_unidad_medida,
                  costo, precio, activo, id_producto)
             )
