@@ -210,8 +210,7 @@ def cerrar_sesion():
     "producto_editando", "producto_form_key", "producto_mensaje",
     "producto_vista", "cliente_editando", "cliente_form_key",
     "cliente_mensaje", "cliente_vista", "proveedor_editando",
-    "proveedor_form_key", "proveedor_mensaje", "proveedor_vista", "insumo_editando", "insumo_form_key", "insumo_mensaje", "insumo_vista"
-    "modulo_anterior",
+    "proveedor_form_key", "proveedor_mensaje", "proveedor_vista", "insumo_editando", "insumo_form_key", "insumo_mensaje", "insumo_vista", "venta_vista", "venta_paso", "venta_cabecera", "venta_lineas", "venta_mensaje", "modulo_anterior",
     ]
     for key in keys_modulos:
         if key in st.session_state:

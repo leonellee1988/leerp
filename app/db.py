@@ -552,3 +552,112 @@ def update_insumo(id_insumo, nombre, descripcion, id_unidad_medida,
                  activo, id_insumo)
             )
         conn.commit()
+
+# ------------------------------------------------------------
+# Ventas
+# ------------------------------------------------------------
+ 
+def get_productos_activos():
+    """Lista reducida de productos activos para el selectbox de ventas."""
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id_producto, codigo_producto, nombre, precio
+                   FROM producto WHERE activo = TRUE
+                   ORDER BY nombre"""
+            )
+            rows = cur.fetchall()
+    return [dict(r) for r in rows]
+ 
+ 
+def insert_venta(fecha, id_cliente, id_usuario, lineas):
+    """Inserta la cabecera, el detalle y los movimientos de Kardex
+    en una sola transacción. Devuelve el id_venta generado."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO venta_cabecera (fecha_venta, id_cliente, id_usuario)
+                   VALUES (%s, %s, %s) RETURNING id_venta""",
+                (fecha, id_cliente, id_usuario)
+            )
+            id_venta = cur.fetchone()[0]
+ 
+            for linea in lineas:
+                cur.execute(
+                    """INSERT INTO venta_detalle
+                       (id_venta, id_producto, cantidad, precio_unitario)
+                       VALUES (%s, %s, %s, %s)""",
+                    (id_venta, linea["id_producto"],
+                     linea["cantidad"], linea["precio"])
+                )
+                cur.execute(
+                    """INSERT INTO movimiento_inventario
+                       (id_producto, tipo_movimiento, cantidad,
+                        referencia_tipo, referencia_id, id_usuario_creacion)
+                       VALUES (%s, 'salida_venta', %s, 'venta', %s, %s)""",
+                    (linea["id_producto"], linea["cantidad"],
+                     id_venta, id_usuario)
+                )
+        conn.commit()
+    return id_venta
+ 
+ 
+def get_venta_codigo(id_venta):
+    """Devuelve el codigo_venta generado para mostrar en el mensaje de éxito."""
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT codigo_venta FROM venta_cabecera WHERE id_venta = %s",
+                (id_venta,)
+            )
+            row = cur.fetchone()
+    return row["codigo_venta"] if row else ""
+ 
+ 
+def get_ventas(fecha_desde, fecha_hasta, busqueda=""):
+    """Ventas en un rango de fechas, con filtro opcional por código o cliente."""
+    condiciones = ["v.fecha_venta BETWEEN %s AND %s"]
+    parametros = [fecha_desde, fecha_hasta]
+ 
+    busqueda = busqueda.strip()
+    if busqueda:
+        condiciones.append(
+            "(v.codigo_venta ILIKE %s OR c.nombre ILIKE %s)"
+        )
+        parametros.extend([f"%{busqueda}%", f"%{busqueda}%"])
+ 
+    where_sql = "WHERE " + " AND ".join(condiciones)
+ 
+    query = f"""
+        SELECT
+            v.id_venta,
+            v.codigo_venta,
+            v.fecha_venta,
+            COALESCE(c.nombre, 'Consumidor Final') AS nombre_cliente,
+            SUM(d.cantidad * d.precio_unitario)     AS total,
+            us.nombre_completo                      AS registrado_por
+        FROM venta_cabecera v
+        LEFT JOIN cliente       c  ON v.id_cliente = c.id_cliente
+        LEFT JOIN venta_detalle d  ON v.id_venta   = d.id_venta
+        LEFT JOIN usuarios      us ON v.id_usuario  = us.id_usuario
+        {where_sql}
+        GROUP BY v.id_venta, v.codigo_venta, v.fecha_venta,
+                 c.nombre, us.nombre_completo
+        ORDER BY v.id_venta DESC
+    """
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, parametros)
+            rows = cur.fetchall()
+ 
+    return [
+        {
+            "id_venta":       r["id_venta"],
+            "codigo_venta":   r["codigo_venta"],
+            "fecha_venta":    str(r["fecha_venta"]),
+            "nombre_cliente": r["nombre_cliente"],
+            "total":          float(r["total"] or 0),
+            "registrado_por": r["registrado_por"] or "—",
+        }
+        for r in rows
+    ]

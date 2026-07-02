@@ -12,7 +12,7 @@ import db
 from utils import permisos
 from utils.navegacion import NAV_STRUCTURE, COLOR_GRUPO
 from utils.iconos import get_icono
-from pages import productos, clientes, proveedores, insumos
+from pages import productos, clientes, proveedores, insumos, ventas
 
 st.set_page_config(
     page_title="LEERP",
@@ -109,6 +109,34 @@ st.markdown("""
 .stTextArea textarea::placeholder,
 .stNumberInput input::placeholder {
     color: rgba(255, 255, 255, 0.4) !important;
+}
+            
+/* Fondo blanco para TODO el popup del calendario, sin excepciones */
+[data-baseweb="calendar"] {
+    background-color: #FFFFFF !important;
+}
+[data-baseweb="calendar"] > div,
+[data-baseweb="calendar"] > div > div,
+[data-baseweb="calendar"] > div > div > div {
+    background-color: #FFFFFF !important;
+    color: #0A2540 !important;
+}
+[data-baseweb="calendar"] * {
+    color: #0A2540 !important;
+}
+[data-baseweb="calendar"] button {
+    background-color: transparent !important;
+    color: #0A2540 !important;
+}
+[data-baseweb="menu"] {
+    background-color: #FFFFFF !important;
+}
+[data-baseweb="menu"] * {
+    color: #0A2540 !important;
+}
+input[data-testid="stDateInputField"] {
+    color: #FFFFFF !important;
+    caret-color: #FFFFFF !important;
 }
 
 </style>
@@ -254,6 +282,7 @@ MODULOS = {
     "clientes": clientes.mostrar,
     "proveedores": proveedores.mostrar,
     "insumos": insumos.mostrar,
+    "ventas": ventas.mostrar,
 }
 
 pagina = st.session_state.pagina_actual
