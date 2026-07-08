@@ -157,7 +157,7 @@ CREATE TABLE movimiento_inventario (
     id_movimiento          SERIAL PRIMARY KEY,
     codigo_movimiento      VARCHAR(20) GENERATED ALWAYS AS('MOV-' || LPAD(id_movimiento::text, 5, '0')) STORED,
     id_producto            INT NOT NULL REFERENCES producto(id_producto),
-    tipo_movimiento        VARCHAR(20) NOT NULL CHECK (tipo_movimiento IN ('inventario_inicial', 'entrada_compra', 'salida_venta','ajuste_positivo', 'ajuste_negativo')),
+    tipo_movimiento        VARCHAR(20) NOT NULL CHECK (tipo_movimiento IN ('inventario_inicial', 'entrada_compra', 'salida_venta','ajuste_positivo', 'ajuste_negativo', 'anulacion_venta')),
     cantidad               NUMERIC(15,2) NOT NULL CHECK (cantidad > 0),
     fecha_movimiento       TIMESTAMP NOT NULL DEFAULT now(),
     referencia_tipo        VARCHAR(20),
@@ -179,7 +179,11 @@ CREATE TABLE venta_cabecera (
     codigo_venta   VARCHAR(20) GENERATED ALWAYS AS('VTA-' || LPAD(id_venta::text, 4, '0')) STORED,
     fecha_venta    DATE NOT NULL DEFAULT CURRENT_DATE,
     id_cliente     INT REFERENCES cliente(id_cliente),
-    id_usuario     INT REFERENCES usuarios(id_usuario)
+    id_usuario     INT REFERENCES usuarios(id_usuario),
+    anulada               BOOLEAN NOT NULL DEFAULT FALSE,
+    motivo_anulacion      TEXT,
+    fecha_anulacion       DATE,
+    id_usuario_anulacion  INT REFERENCES usuarios(id_usuario)
 );
 
 CREATE TABLE venta_detalle (

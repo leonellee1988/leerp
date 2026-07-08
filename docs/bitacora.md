@@ -524,3 +524,143 @@ Antes de codificar, definir:
 - Cómo manejar el detalle (múltiples líneas de producto) en Streamlit
 - Cómo el Kardex recibe el movimiento automático al guardar la venta
 - Campos mínimos para ser FEL-ready desde el día 1
+
+### Sesión 18 — Módulo Ventas (construcción, depuración y consulta transaccional)
+
+#### Módulo Ventas — construcción inicial
+
+- `app/pages/ventas.py` creado: patrón de 2 pasos en vez del patrón de
+  3 vistas usado en los maestros — complejidad nueva (cabecera +
+  múltiples líneas de detalle) no encajaba en el patrón anterior
+  - Paso 1: datos de cabecera — tipo de cliente (Consumidor Final /
+    Cliente registrado / Buscar por NIT), fecha de venta
+  - Paso 2: líneas de detalle — búsqueda de producto tipo-ahead (mismo
+    patrón de búsqueda por nombre/código ya usado en Clientes),
+    cantidad, precio editable, tabla acumulada de líneas con opción de
+    eliminar antes de guardar
+- Validación agregada: no permite agregar el mismo producto dos veces
+  en una venta (evita líneas duplicadas — el usuario debe editar
+  cantidad en la línea existente)
+- Opción "Buscar por NIT (FEL)" dejada como placeholder deshabilitado
+  — mensaje "Módulo FEL disponible próximamente" — consistente con la
+  decisión de Sesión 17 (FEL es Capa 2, add-on aparte)
+- `venta_cabecera` / `venta_detalle` ya existían en `leerp_schema.sql`
+  (v1.1) — no fue necesario modificar el esquema para esta sesión
+
+#### Bug — `KeyError: 'total'` en Consultar
+
+- Causa raíz diagnosticada: `get_ventas()` en `db.py` devolvía cada
+  fila con la llave `total_venta`, pero `ventas.py` leía `v['total']`
+  — nombres desincronizados entre la query y la vista
+- Hallazgo más importante detrás del mismo bug: la query original unía
+  `venta_detalle` dos veces (`d` y `d2`) para calcular el total con
+  `SUM() OVER (PARTITION BY ...)` — esto generaba un producto
+  cartesiano en ventas con más de una línea (N líneas × N líneas antes
+  de la ventana), inflando el número de filas devueltas de forma
+  silenciosa
+- Fix: `get_ventas()` reescrita — un solo `JOIN` a `venta_detalle` +
+  subquery aparte (`GROUP BY id_venta`) para el total por venta, sin
+  self-join. Elimina el cartesiano y corrige el nombre de la llave
+
+#### Decisión pendiente cerrada — campos de la consulta transaccional
+
+- Se identificó que la Sesión 17 dejó pendiente ("próxima sesión —
+  diseño de Ventas") la definición formal de campos para Consultar, y
+  nunca se completó antes de empezar a codificar — laguna de proceso
+  detectada y corregida en esta sesión
+- Campos definidos para que Consultar sirva de base a futuros
+  dashboards (Comercial / Financiero), no solo como pantalla de
+  revisión:
+  - Cliente + NIT (FEL-ready, decisión Sesión 17)
+  - Producto + Categoría (categoría controlada = agrupación BI,
+    decisión Sesión 2)
+  - Cantidad, Precio unitario, Subtotal
+  - Costo, Margen (decisión Sesión 14: el margen vive en BD para el
+    Dashboard Financiero)
+  - Total de venta, Estado (Activa/Anulada), Registrado por
+- **Limitación conocida, sin resolver:** el margen se calcula con el
+  `producto.costo` **actual**, no con el costo real al momento de la
+  venta — `venta_detalle` no guarda un snapshot de costo (a diferencia
+  de `compra_detalle`, que sí guarda `costo_unitario` histórico).
+  Pendiente evaluar si se agrega `costo_unitario` a `venta_detalle`
+  antes de construir el Dashboard Financiero, para márgenes históricos
+  exactos
+
+#### Iteración de diseño — vista Consultar
+
+- Primer intento: resumen de cabecera (una fila por venta) +
+  `st.expander` por venta con el detalle de líneas — descartado:
+  no escala para revisar visualmente muchas transacciones (ej. 100
+  ventas en un mes = 100 clics), aunque el CSV de descarga ya era
+  una sola descarga para todo el rango, no por venta
+- Segundo intento: `st.radio` para alternar entre "Resumen por venta"
+  y "Detalle completo" (tabla plana) — descartado: el radio no
+  aportaba suficiente valor sobre solo mostrar el detalle, y además
+  causó un bug (ver abajo)
+- **Diseño final:** una sola tabla plana, grano de línea de producto
+  (una fila por producto vendido, todas las ventas del rango juntas),
+  ordenable por columna con clic — mismo shape que el CSV de
+  descarga. Referencia de patrón: listados transaccionales tipo SAP
+  (`VA05`) — tabla plana en vez de jerarquías visuales
+- Concepto BI aplicado: esta tabla es la "tabla de hechos" (*fact
+  table*) de Ventas — el mismo shape que va a leer el futuro Dashboard
+  Comercial/Financiero sin necesidad de rehacer la query
+
+#### Bug — resultados desaparecen al interactuar con otros controles
+
+- Causa raíz: la búsqueda dependía únicamente de `st.button("Buscar")`,
+  cuyo estado es transitorio (`True` solo en el render inmediato al
+  clic). Cualquier otro widget de la página (el `st.radio` del intento
+  anterior, o incluso el botón de descarga CSV) dispara un rerun de
+  Streamlit, y en ese rerun `buscar` vuelve a `False` — la función
+  regresaba al mensaje "Configura los filtros y presiona Buscar",
+  borrando visualmente los resultados ya obtenidos
+- Fix: resultados de la búsqueda guardados en
+  `st.session_state.vta_resultados`, ya no dependen del estado
+  transitorio del botón. Se limpia al reingresar al módulo (mismo
+  patrón de reset ya usado para las demás llaves de sesión)
+
+#### Validado en pruebas
+
+- 2 ingresos de prueba realizados directamente en el ERP (sin datos
+  semilla — Chandler ingresando como usuario real para detectar bugs,
+  igual que en los demás maestros)
+- Consulta y descarga de CSV confirmadas funcionando correctamente
+  después de los fixes
+
+#### Archivos modificados en esta sesión
+
+- `app/pages/ventas.py` — creado y luego iterado varias veces
+  (Paso 1 y Paso 2 estables desde la primera versión; Consultar
+  rediseñada tres veces hasta la tabla plana final)
+- `app/db.py` — `get_ventas()` reescrita: grano de línea, sin
+  producto cartesiano, con cliente/NIT, categoría, costo y margen
+
+#### Pendiente para próximas sesiones
+
+1. Conectar el guardado de una venta con `movimiento_inventario`
+   (`tipo_movimiento = 'salida_venta'`) — actualmente `insert_venta()`
+   guarda la transacción pero no se confirmó si ya descuenta stock
+   vía Kardex
+2. UI de anulación de venta (`anulada`, `motivo_anulacion` ya existen
+   en el esquema desde v1.1, falta la pantalla/flujo)
+3. Evaluar `costo_unitario` histórico en `venta_detalle` para margen
+   exacto (ver limitación arriba)
+4. Mejora menor de UX: mover el botón de descarga CSV más arriba,
+   cerca de los filtros, para que sea más visible
+5. Con Ventas estabilizado, continuar con **Compras** (mismo patrón
+   cabecera/detalle, según roadmap de Sesión 17)
+
+### Estado actual (post Sesión 18)
+
+| Módulo | Estado |
+|---|---|
+| Productos | COMPLETO |
+| Clientes | COMPLETO |
+| Proveedores | COMPLETO |
+| Insumos | COMPLETO |
+| Ventas | EN PROGRESO — alta y consulta funcionales; falta Kardex automático y anulación |
+
+A partir de esta sesión, la bitácora se actualiza de forma incremental
+(solo los avances de cada sesión nueva se agregan al final del
+documento).

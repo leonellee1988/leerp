@@ -614,50 +614,123 @@ def get_venta_codigo(id_venta):
     return row["codigo_venta"] if row else ""
  
  
-def get_ventas(fecha_desde, fecha_hasta, busqueda=""):
-    """Ventas en un rango de fechas, con filtro opcional por código o cliente."""
+def get_ventas(fecha_desde, fecha_hasta, busqueda="", mostrar_anuladas=False):
+    """Ventas en rango de fechas — una fila por línea de producto vendido.
+    Esta es la base transaccional de Ventas: se usa tanto para el resumen
+    en pantalla (agrupado por id_venta en ventas.py) como para el CSV de
+    exportación, y a futuro para los dashboards Comercial y Financiero.
+    Incluye cliente (con NIT para FEL), categoría (para BI) y costo/margen
+    (para análisis financiero, con costo ACTUAL del producto — no histórico).
+    Filtra anuladas por defecto."""
     condiciones = ["v.fecha_venta BETWEEN %s AND %s"]
     parametros = [fecha_desde, fecha_hasta]
- 
+
+    if not mostrar_anuladas:
+        condiciones.append("v.anulada = FALSE")
+
     busqueda = busqueda.strip()
     if busqueda:
-        condiciones.append(
-            "(v.codigo_venta ILIKE %s OR c.nombre ILIKE %s)"
-        )
+        condiciones.append("(v.codigo_venta ILIKE %s OR c.nombre ILIKE %s)")
         parametros.extend([f"%{busqueda}%", f"%{busqueda}%"])
- 
+
     where_sql = "WHERE " + " AND ".join(condiciones)
- 
+
+    # NOTA: el total por venta se calcula en una subquery aparte (tot) y
+    # se une por id_venta — así se evita el producto cartesiano que salía
+    # antes al unir venta_detalle dos veces (d y d2) para el mismo cálculo.
     query = f"""
         SELECT
             v.id_venta,
             v.codigo_venta,
             v.fecha_venta,
-            COALESCE(c.nombre, 'Consumidor Final') AS nombre_cliente,
-            SUM(d.cantidad * d.precio_unitario)     AS total,
-            us.nombre_completo                      AS registrado_por
+            c.nit                                      AS nit_cliente,
+            COALESCE(c.nombre, 'Consumidor Final')      AS nombre_cliente,
+            p.id_producto,
+            p.codigo_producto,
+            p.nombre                                    AS nombre_producto,
+            cat.nombre                                  AS categoria,
+            d.cantidad,
+            d.precio_unitario,
+            (d.cantidad * d.precio_unitario)            AS subtotal,
+            p.costo,
+            (d.precio_unitario - p.costo) * d.cantidad  AS margen,
+            tot.total                                   AS total_venta,
+            us.nombre_completo                          AS registrado_por,
+            v.anulada,
+            v.motivo_anulacion
         FROM venta_cabecera v
-        LEFT JOIN cliente       c  ON v.id_cliente = c.id_cliente
-        LEFT JOIN venta_detalle d  ON v.id_venta   = d.id_venta
-        LEFT JOIN usuarios      us ON v.id_usuario  = us.id_usuario
+        JOIN venta_detalle   d   ON d.id_venta      = v.id_venta
+        LEFT JOIN producto   p   ON d.id_producto   = p.id_producto
+        LEFT JOIN categoria  cat ON p.id_categoria  = cat.id_categoria
+        LEFT JOIN cliente    c   ON v.id_cliente    = c.id_cliente
+        LEFT JOIN usuarios   us  ON v.id_usuario    = us.id_usuario
+        LEFT JOIN (
+            SELECT id_venta, SUM(cantidad * precio_unitario) AS total
+            FROM venta_detalle
+            GROUP BY id_venta
+        ) tot ON tot.id_venta = v.id_venta
         {where_sql}
-        GROUP BY v.id_venta, v.codigo_venta, v.fecha_venta,
-                 c.nombre, us.nombre_completo
-        ORDER BY v.id_venta DESC
+        ORDER BY v.id_venta DESC, d.id_detalle
     """
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(query, parametros)
             rows = cur.fetchall()
- 
+
     return [
         {
-            "id_venta":       r["id_venta"],
-            "codigo_venta":   r["codigo_venta"],
-            "fecha_venta":    str(r["fecha_venta"]),
-            "nombre_cliente": r["nombre_cliente"],
-            "total":          float(r["total"] or 0),
-            "registrado_por": r["registrado_por"] or "—",
+            "id_venta":         r["id_venta"],
+            "codigo_venta":     r["codigo_venta"],
+            "fecha_venta":      str(r["fecha_venta"]),
+            "nit_cliente":      r["nit_cliente"] or "—",
+            "nombre_cliente":   r["nombre_cliente"],
+            "id_producto":      r["id_producto"],
+            "codigo_producto":  r["codigo_producto"] or "—",
+            "nombre_producto":  r["nombre_producto"] or "—",
+            "categoria":        r["categoria"]        or "—",
+            "cantidad":         float(r["cantidad"]        or 0),
+            "precio_unitario":  float(r["precio_unitario"] or 0),
+            "subtotal":         float(r["subtotal"]         or 0),
+            "costo":            float(r["costo"]            or 0),
+            "margen":           float(r["margen"]           or 0),
+            "total_venta":      float(r["total_venta"]      or 0),
+            "registrado_por":   r["registrado_por"]  or "—",
+            "anulada":          r["anulada"],
+            "motivo_anulacion": r["motivo_anulacion"] or "—",
         }
         for r in rows
     ]
+
+
+def anular_venta(id_venta, motivo, id_usuario):
+    """Anula una venta: marca la cabecera y genera movimientos de devolución
+    en el Kardex por cada línea — nunca se hace DELETE físico."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE venta_cabecera
+                   SET anulada = TRUE,
+                       motivo_anulacion = %s,
+                       fecha_anulacion = CURRENT_DATE,
+                       id_usuario_anulacion = %s
+                   WHERE id_venta = %s""",
+                (motivo, id_usuario, id_venta)
+            )
+            cur.execute(
+                """SELECT id_producto, cantidad
+                   FROM venta_detalle WHERE id_venta = %s""",
+                (id_venta,)
+            )
+            lineas = cur.fetchall()
+            for linea in lineas:
+                cur.execute(
+                    """INSERT INTO movimiento_inventario
+                       (id_producto, tipo_movimiento, cantidad,
+                        referencia_tipo, referencia_id,
+                        nota, id_usuario_creacion)
+                       VALUES (%s, 'anulacion_venta', %s,
+                               'anulacion_venta', %s, %s, %s)""",
+                    (linea[0], linea[1], id_venta,
+                     f"Anulación venta — {motivo}", id_usuario)
+                )
+        conn.commit()

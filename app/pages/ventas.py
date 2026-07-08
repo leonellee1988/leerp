@@ -9,6 +9,7 @@ def mostrar():
 
     if st.session_state.get("modulo_anterior") != "ventas":
         st.session_state.venta_vista = "nuevo"
+        st.session_state.vta_resultados = None
         _resetear_venta()
     st.session_state.modulo_anterior = "ventas"
 
@@ -286,19 +287,30 @@ def _vista_nueva_venta(usuario):
                     st.error("La cantidad debe ser mayor a cero.")
                 else:
                     prod = st.session_state.venta_prod_seleccionado
-                    linea = {
-                        "id_producto": prod["id_producto"],
-                        "codigo":      prod["codigo_producto"],
-                        "nombre":      prod["nombre"],
-                        "cantidad":    cantidad,
-                        "precio":      precio_linea,
-                        "subtotal":    round(cantidad * precio_linea, 2),
-                    }
-                    st.session_state.venta_lineas.append(linea)
-                    st.session_state.venta_prod_seleccionado = None
-                    st.session_state.venta_resultados_productos = []
-                    st.session_state.venta_linea_key += 1
-                    st.rerun()
+                    # R2 — Validar productos duplicados en la misma venta
+                    ya_existe = any(
+                        l["id_producto"] == prod["id_producto"]
+                        for l in st.session_state.venta_lineas
+                    )
+                    if ya_existe:
+                        st.error(
+                            f"'{prod['nombre']}' ya está en esta venta. "
+                            "Edita la cantidad en la línea existente."
+                        )
+                    else:
+                        linea = {
+                            "id_producto": prod["id_producto"],
+                            "codigo":      prod["codigo_producto"],
+                            "nombre":      prod["nombre"],
+                            "cantidad":    cantidad,
+                            "precio":      precio_linea,
+                            "subtotal":    round(cantidad * precio_linea, 2),
+                        }
+                        st.session_state.venta_lineas.append(linea)
+                        st.session_state.venta_prod_seleccionado = None
+                        st.session_state.venta_resultados_productos = []
+                        st.session_state.venta_linea_key += 1
+                        st.rerun()
 
         st.divider()
 
@@ -358,6 +370,14 @@ def _vista_nueva_venta(usuario):
 
 
 def _vista_consultar():
+    """Consultar ventas — tabla plana única, grano de línea de producto
+    (una fila por producto vendido, mismo shape que el CSV de descarga).
+
+    Los resultados se guardan en session_state (vta_resultados) porque
+    cualquier otro widget de la página (ej. el botón de descarga) dispara
+    un rerun de Streamlit — sin esto, el botón 'Buscar' es la única fuente
+    de los datos y cualquier otra interacción los "borra" de pantalla.
+    """
     config = db.get_config_empresa()
     simbolo = config["moneda_simbolo"] if config else "Q"
 
@@ -378,27 +398,72 @@ def _vista_consultar():
                            use_container_width=True, key="btn_buscar_ventas")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    if not buscar:
-        st.info("Configura los filtros y presiona Buscar.")
-    else:
-        ventas = db.get_ventas(fecha_desde, fecha_hasta, busqueda)
-        if not ventas:
-            st.info("No hay ventas que coincidan con la búsqueda.")
-        else:
-            st.caption(f"Mostrando {len(ventas)} venta(s)")
-            df = pd.DataFrame([{
-                "Código":         v["codigo_venta"],
-                "Fecha":          v["fecha_venta"],
-                "Cliente":        v["nombre_cliente"],
-                "Total":          f"{simbolo} {v['total']:,.2f}",
-                "Registrado por": v["registrado_por"],
-            } for v in ventas])
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    if buscar:
+        st.session_state.vta_resultados = db.get_ventas(fecha_desde, fecha_hasta, busqueda)
 
-            total_periodo = sum(v["total"] for v in ventas)
-            st.markdown(
-                f"<div style='text-align:right; font-size:16px; font-weight:700;"
-                f"color:#0A2540; padding:8px 0;'>"
-                f"Total período: {simbolo} {total_periodo:,.2f}</div>",
-                unsafe_allow_html=True
-            )
+    lineas = st.session_state.get("vta_resultados")
+
+    if lineas is None:
+        st.info("Configura los filtros y presiona Buscar.")
+        return
+    if not lineas:
+        st.info("No hay ventas que coincidan con la búsqueda.")
+        return
+
+    # Total por venta único (una venta puede tener varias líneas, y todas
+    # traen el mismo total_venta repetido — se toma una sola vez por id_venta).
+    totales_por_venta = {l["id_venta"]: l["total_venta"] for l in lineas}
+
+    st.caption(f"Mostrando {len(totales_por_venta)} venta(s) — {len(lineas)} línea(s) de producto")
+
+    df_tabla = pd.DataFrame([{
+        "Venta":     l["codigo_venta"],
+        "Fecha":     l["fecha_venta"],
+        "Cliente":   l["nombre_cliente"],
+        "Producto":  l["nombre_producto"],
+        "Categoría": l["categoria"],
+        "Cantidad":  f"{l['cantidad']:.2f}",
+        "Precio":    f"{simbolo} {l['precio_unitario']:.2f}",
+        "Subtotal":  f"{simbolo} {l['subtotal']:.2f}",
+        "Costo":     f"{simbolo} {l['costo']:.2f}",
+        "Margen":    f"{simbolo} {l['margen']:.2f}",
+        "Estado":    "Anulada" if l["anulada"] else "Activa",
+    } for l in lineas])
+
+    st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+
+    total_periodo = sum(totales_por_venta.values())
+    st.markdown(
+        f"<div style='text-align:right; font-size:16px; font-weight:700;"
+        f"color:#0A2540; padding:8px 0;'>"
+        f"Total período: {simbolo} {total_periodo:,.2f}</div>",
+        unsafe_allow_html=True
+    )
+
+    st.divider()
+
+    # --- CSV: mismo grano de línea que la tabla en pantalla ---
+    df_csv = pd.DataFrame([{
+        "Codigo venta":    l["codigo_venta"],
+        "Fecha":           l["fecha_venta"],
+        "Cliente":         l["nombre_cliente"],
+        "NIT cliente":     l["nit_cliente"],
+        "Codigo producto": l["codigo_producto"],
+        "Producto":        l["nombre_producto"],
+        "Categoria":       l["categoria"],
+        "Cantidad":        l["cantidad"],
+        "Precio unitario": l["precio_unitario"],
+        "Subtotal linea":  l["subtotal"],
+        "Costo unitario":  l["costo"],
+        "Margen linea":    l["margen"],
+        "Total venta":     l["total_venta"],
+        "Estado":          "Anulada" if l["anulada"] else "Activa",
+        "Registrado por":  l["registrado_por"],
+    } for l in lineas])
+
+    st.download_button(
+        "Descargar CSV (detalle completo)",
+        data=df_csv.to_csv(index=False).encode("utf-8"),
+        file_name=f"ventas_{fecha_desde}_{fecha_hasta}.csv",
+        mime="text/csv",
+    )
